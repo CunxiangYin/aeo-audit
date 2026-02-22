@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AEO Audit — Agent Engine Optimization</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { background: #0a0e1a; color: #e2e8f0; font-family: 'Inter', system-ui, sans-serif; }
+  .glow { box-shadow: 0 0 30px rgba(99, 102, 241, 0.3); }
+  .glow-text { text-shadow: 0 0 20px rgba(99, 102, 241, 0.5); }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes pulse-ring { 0% { transform: scale(0.8); opacity: 1; } 100% { transform: scale(1.4); opacity: 0; } }
+  .loader { width: 60px; height: 60px; border: 3px solid rgba(99,102,241,0.2); border-top-color: #6366f1; border-radius: 50%; animation: spin 0.8s linear infinite; }
+  .progress-ring { transition: stroke-dashoffset 1s ease-out; }
+  .card { background: rgba(15, 23, 42, 0.8); border: 1px solid rgba(99, 102, 241, 0.2); backdrop-filter: blur(10px); }
+  .grade-badge { font-size: 2rem; font-weight: 800; width: 60px; height: 60px; display: flex; align-items: center; justify-content: center; border-radius: 12px; }
+  .fade-in { animation: fadeIn 0.5s ease-out; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+  input::placeholder { color: #64748b; }
+</style>
+</head>
+<body class="min-h-screen">
+<div class="max-w-4xl mx-auto px-4 py-12">
+  <!-- Header -->
+  <div class="text-center mb-12">
+    <h1 class="text-4xl md:text-5xl font-bold mb-3 glow-text bg-gradient-to-r from-indigo-400 via-purple-400 to-cyan-400 bg-clip-text text-transparent">AEO Audit</h1>
+    <p class="text-lg text-indigo-300">Agent Engine Optimization</p>
+    <p class="text-slate-400 mt-2">检测你的网站对 AI Agent 的友好度</p>
+  </div>
+
+  <!-- Input -->
+  <div class="flex gap-3 max-w-2xl mx-auto mb-12">
+    <input id="urlInput" type="url" placeholder="输入网站 URL，例如 https://example.com" class="flex-1 px-5 py-3.5 rounded-xl bg-slate-800/80 border border-slate-600/50 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 text-white text-lg transition" />
+    <button id="auditBtn" onclick="startAudit()" class="px-8 py-3.5 bg-indigo-600 hover:bg-indigo-500 rounded-xl font-semibold text-lg transition whitespace-nowrap glow">开始审计</button>
+  </div>
+
+  <!-- Loading -->
+  <div id="loading" class="hidden text-center py-16">
+    <div class="loader mx-auto mb-6"></div>
+    <p class="text-indigo-300 text-lg" id="loadingText">正在审计中...</p>
+    <p class="text-slate-500 mt-2 text-sm">检测结构化数据、语义质量、AI 爬虫策略等</p>
+  </div>
+
+  <!-- Error -->
+  <div id="error" class="hidden card rounded-2xl p-6 text-center">
+    <p class="text-red-400 text-lg" id="errorText"></p>
+  </div>
+
+  <!-- Results -->
+  <div id="results" class="hidden space-y-8 fade-in">
+    <!-- Score Card -->
+    <div class="card rounded-2xl p-8 flex flex-col md:flex-row items-center gap-8">
+      <div class="relative">
+        <svg width="160" height="160" class="transform -rotate-90">
+          <circle cx="80" cy="80" r="70" fill="none" stroke="#1e293b" stroke-width="10"/>
+          <circle id="scoreRing" cx="80" cy="80" r="70" fill="none" stroke="#6366f1" stroke-width="10" stroke-linecap="round" stroke-dasharray="440" stroke-dashoffset="440" class="progress-ring"/>
+        </svg>
+        <div class="absolute inset-0 flex flex-col items-center justify-center">
+          <span id="scoreNum" class="text-4xl font-bold text-white">0</span>
+          <span class="text-slate-400 text-sm">/100</span>
+        </div>
+      </div>
+      <div class="text-center md:text-left">
+        <div class="flex items-center gap-4 mb-2">
+          <h2 class="text-2xl font-bold">Agent 友好度评分</h2>
+          <div id="gradeBadge" class="grade-badge"></div>
+        </div>
+        <p id="scoreUrl" class="text-slate-400 text-sm mb-3 break-all"></p>
+        <p id="scoreSummary" class="text-slate-300"></p>
+      </div>
+    </div>
+
+    <!-- Detail Cards -->
+    <div id="detailCards" class="space-y-4"></div>
+
+    <!-- Suggestions -->
+    <div id="suggestionsSection" class="card rounded-2xl p-8">
+      <h3 class="text-xl font-bold mb-6 text-indigo-300">📋 优化建议</h3>
+      <div id="suggestionsList" class="space-y-4"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const gradeColors = { A: 'bg-emerald-500', B: 'bg-blue-500', C: 'bg-yellow-500', D: 'bg-orange-500', F: 'bg-red-500' };
+const gradeColorText = { A: '#10b981', B: '#3b82f6', C: '#eab308', D: '#f97316', F: '#ef4444' };
+const statusIcon = { pass: '✅', partial: '⚠️', fail: '❌' };
+const statusLabel = { pass: '通过', partial: '部分通过', fail: '未通过' };
+const statusColor = { pass: 'text-emerald-400', partial: 'text-yellow-400', fail: 'text-red-400' };
+
+async function startAudit() {
+  const url = document.getElementById('urlInput').value.trim();
+  if (!url) return;
+
+  document.getElementById('loading').classList.remove('hidden');
+  document.getElementById('results').classList.add('hidden');
+  document.getElementById('error').classList.add('hidden');
+  document.getElementById('auditBtn').disabled = true;
+  document.getElementById('auditBtn').textContent = '审计中...';
+
+  try {
+    const res = await fetch('/api/audit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || '审计失败');
+    renderResults(data);
+  } catch (e) {
+    document.getElementById('error').classList.remove('hidden');
+    document.getElementById('errorText').textContent = e.message;
+  } finally {
+    document.getElementById('loading').classList.add('hidden');
+    document.getElementById('auditBtn').disabled = false;
+    document.getElementById('auditBtn').textContent = '开始审计';
+  }
+}
+
+function renderResults(data) {
+  const el = document.getElementById('results');
+  el.classList.remove('hidden');
+
+  // Score animation
+  const ring = document.getElementById('scoreRing');
+  const offset = 440 - (440 * data.score / 100);
+  ring.style.stroke = gradeColorText[data.grade];
+  setTimeout(() => ring.style.strokeDashoffset = offset, 50);
+
+  // Animate number
+  let current = 0;
+  const target = data.score;
+  const step = () => { current = Math.min(current + 1, target); document.getElementById('scoreNum').textContent = current; if (current < target) requestAnimationFrame(step); };
+  step();
+
+  // Grade badge
+  const badge = document.getElementById('gradeBadge');
+  badge.textContent = data.grade;
+  badge.className = `grade-badge ${gradeColors[data.grade]} text-white rounded-xl`;
+
+  document.getElementById('scoreUrl').textContent = data.url;
+  const summaries = { A: '出色！你的网站对 AI Agent 非常友好', B: '良好，但仍有优化空间', C: '一般，建议关注以下优化建议', D: '较差，需要大幅改进', F: '很差，AI Agent 几乎无法有效使用你的网站' };
+  document.getElementById('scoreSummary').textContent = summaries[data.grade];
+
+  // Detail cards
+  const cards = document.getElementById('detailCards');
+  cards.innerHTML = data.results.map(r => `
+    <div class="card rounded-xl p-5">
+      <div class="flex items-center justify-between mb-3">
+        <div class="flex items-center gap-3">
+          <span class="text-xl">${statusIcon[r.status]}</span>
+          <h4 class="font-semibold text-lg">${r.name}</h4>
+        </div>
+        <div class="flex items-center gap-3">
+          <span class="${statusColor[r.status]} text-sm font-medium">${statusLabel[r.status]}</span>
+          <span class="text-slate-400 font-mono text-sm">${r.score}/${r.max}</span>
+        </div>
+      </div>
+      <div class="w-full bg-slate-700/50 rounded-full h-1.5 mb-3">
+        <div class="h-1.5 rounded-full transition-all duration-700" style="width:${r.score/r.max*100}%;background:${r.status==='pass'?'#10b981':r.status==='partial'?'#eab308':'#ef4444'}"></div>
+      </div>
+      <ul class="text-sm text-slate-400 space-y-1">${r.findings.map(f => `<li>${f}</li>`).join('')}</ul>
+    </div>
+  `).join('');
+
+  // Suggestions
+  const list = document.getElementById('suggestionsList');
+  if (data.suggestions.length === 0) {
+    list.innerHTML = '<p class="text-emerald-400">🎉 太棒了！暂无需要优化的项目。</p>';
+  } else {
+    const impactBadge = { '高': 'bg-red-500/20 text-red-300', '中': 'bg-yellow-500/20 text-yellow-300', '低': 'bg-blue-500/20 text-blue-300' };
+    list.innerHTML = data.suggestions.map((s, i) => `
+      <div class="border border-slate-700/50 rounded-lg p-4">
+        <div class="flex items-start gap-3">
+          <span class="text-indigo-400 font-bold mt-0.5">${i + 1}.</span>
+          <div class="flex-1">
+            <div class="flex items-center gap-2 mb-1">
+              <h5 class="font-semibold">${s.title}</h5>
+              <span class="text-xs px-2 py-0.5 rounded-full ${impactBadge[s.impact]}">${s.impact}影响</span>
+            </div>
+            <p class="text-sm text-slate-400">${s.desc}</p>
+          </div>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+document.getElementById('urlInput').addEventListener('keydown', e => { if (e.key === 'Enter') startAudit(); });
+</script>
+</body>
+</html>

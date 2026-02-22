@@ -1,0 +1,21 @@
+{
+  "name": "aeo-audit",
+  "version": "1.0.0",
+  "description": "AEO (Agent Engine Optimization) Audit Tool — 检测你的网站对 AI Agent 的友好度",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "keywords": ["aeo", "seo", "ai-agent", "audit", "llms-txt", "schema-org", "webmcp"],
+  "author": "Cunxiang Yin",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/CunxiangYin/aeo-audit.git"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "axios": "^1.6.0",
+    "cheerio": "^1.0.0-rc.12"
+  }
+}
